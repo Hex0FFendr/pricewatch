@@ -120,6 +120,12 @@ def current_version(conn: sqlite3.Connection) -> int:
     return int(row["v"])
 
 
+def latest_available_version() -> int:
+    """Highest migration version this build ships."""
+    available = _load_migrations()
+    return available[-1].version if available else 0
+
+
 def migrate(conn: sqlite3.Connection) -> list[Migration]:
     """Apply every pending migration. Returns the ones applied, in order."""
     conn.execute(_SCHEMA_MIGRATIONS_DDL)

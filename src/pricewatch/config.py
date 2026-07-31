@@ -108,6 +108,17 @@ class AccountConfig(_Strict):
     name: Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")]
     site: SiteId
     enabled: bool = True
+    #: Where `login` and `discover` open the browser. Intentionally has no
+    #: default: the tool ships no guessed URLs, and you can always navigate
+    #: yourself in the window it opens. Overridable per invocation with --url.
+    home_url: str | None = None
+
+    @field_validator("home_url")
+    @classmethod
+    def _https_only(cls, value: str | None) -> str | None:
+        if value is not None and not value.startswith("https://"):
+            raise ValueError("must be an https:// URL")
+        return value
 
 
 class TriggersConfig(_Strict):

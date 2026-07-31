@@ -6,6 +6,8 @@ import pytest
 from typer.testing import CliRunner, Result
 
 from pricewatch.cli import EXIT_NOT_IMPLEMENTED, app
+from pricewatch.db import latest_available_version, open_database
+from pricewatch.session import SessionStore
 
 runner = CliRunner()
 
@@ -90,7 +92,7 @@ def test_init_is_idempotent(config_file: Path) -> None:
 def test_db_version_reports_schema(config_file: Path) -> None:
     runner.invoke(app, ["--config", str(config_file), "init"])
     result = runner.invoke(app, ["--config", str(config_file), "db", "version"])
-    assert result.stdout.strip() == "1"
+    assert result.stdout.strip() == str(latest_available_version())
 
 
 def test_missing_config_is_a_clean_error(tmp_path: Path) -> None:
@@ -102,8 +104,6 @@ def test_missing_config_is_a_clean_error(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     "args",
     [
-        ["login", "asos-uk"],
-        ["discover", "asos-uk"],
         ["run", "--once"],
         ["target", "1", "29.99"],
         ["history", "1"],
@@ -116,8 +116,76 @@ def test_unbuilt_commands_exit_distinctly(config_file: Path, args: list[str]) ->
     assert "not implemented yet" in everything(result)
 
 
-def test_login_validates_the_account_name_first(config_file: Path) -> None:
-    # Name errors should be reported even though the command body is unbuilt.
-    result = runner.invoke(app, ["--config", str(config_file), "login", "no-such-account"])
-    assert result.exit_code != EXIT_NOT_IMPLEMENTED
+@pytest.mark.parametrize("command", ["login", "discover"])
+def test_browser_commands_validate_the_account_name(config_file: Path, command: str) -> None:
+    result = runner.invoke(app, ["--config", str(config_file), command, "no-such-account"])
+    assert result.exit_code != 0
     assert "no-such-account" in everything(result)
+    assert "asos-uk" in everything(result)  # names the accounts that do exist
+
+
+def test_login_warns_when_no_adapter_can_verify(config_file: Path) -> None:
+    # ASOS has no adapter yet, so login cannot confirm sign-in. That has to be
+    # said before the browser opens, not discovered afterwards.
+    result = runner.invoke(app, ["--config", str(config_file), "login", "asos-uk"], input="n\n")
+    output = everything(result)
+    assert "cannot be verified automatically" in output
+    assert "unverified" in output
+
+
+def test_session_status_without_a_session(config_file: Path) -> None:
+    result = runner.invoke(app, ["--config", str(config_file), "session", "status", "asos-uk"])
+    assert result.exit_code == 1
+    assert "pricewatch login asos-uk" in everything(result)
+
+
+def test_session_status_reports_a_stored_session(config_file: Path, tmp_path: Path) -> None:
+    store = SessionStore.open(tmp_path / "state")
+    store.save(
+        "asos-uk",
+        {
+            "cookies": [{"name": "sid", "value": "secret-value-here", "expires": 4102444800.0}],
+            "origins": [
+                {
+                    "origin": "https://www.example.co.uk",
+                    "localStorage": [{"name": "auth.bearer", "value": "tok"}],
+                }
+            ],
+        },
+    )
+    result = runner.invoke(app, ["--config", str(config_file), "session", "status", "asos-uk"])
+    assert result.exit_code == 0
+    output = everything(result)
+    assert "sid" in output
+    assert "auth.bearer" in output
+    assert "secret-value-here" not in output  # facts, never values
+
+
+def test_session_clear_requires_confirmation(config_file: Path, tmp_path: Path) -> None:
+    store = SessionStore.open(tmp_path / "state")
+    store.save("asos-uk", {"cookies": [], "origins": []})
+    runner.invoke(app, ["--config", str(config_file), "init"])
+
+    declined = runner.invoke(
+        app, ["--config", str(config_file), "session", "clear", "asos-uk"], input="n\n"
+    )
+    assert declined.exit_code == 1
+    assert store.exists("asos-uk")
+
+    accepted = runner.invoke(
+        app, ["--config", str(config_file), "session", "clear", "asos-uk", "--yes"]
+    )
+    assert accepted.exit_code == 0
+    assert not store.exists("asos-uk")
+
+
+def test_session_clear_marks_the_account_for_reauth(config_file: Path, tmp_path: Path) -> None:
+    store = SessionStore.open(tmp_path / "state")
+    store.save("asos-uk", {"cookies": [], "origins": []})
+    runner.invoke(app, ["--config", str(config_file), "init"])
+    runner.invoke(app, ["--config", str(config_file), "session", "clear", "asos-uk", "--yes"])
+
+    conn = open_database(tmp_path / "state" / "pricewatch.db")
+    row = conn.execute("SELECT status FROM accounts WHERE name = 'asos-uk'").fetchone()
+    conn.close()
+    assert row["status"] == "needs_reauth"

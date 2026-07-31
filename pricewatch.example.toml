@@ -30,6 +30,10 @@ raw_response_retention = 20
 [[accounts]]
 name = "asos-uk"
 site = "asos"
+# Where `login` and `discover` open the browser. No default is shipped: this
+# tool contains no guessed URLs. Leave it unset and navigate yourself in the
+# window that opens, or override per run with --url.
+# home_url = "https://www.asos.com"
 
 [[accounts]]
 name = "fp-uk"

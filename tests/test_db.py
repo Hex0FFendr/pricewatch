@@ -10,6 +10,7 @@ from pricewatch.db import (
     Migration,
     connect,
     current_version,
+    latest_available_version,
     migrate,
     open_database,
     transaction,
@@ -56,8 +57,8 @@ class TestMigrations:
         conn = connect(tmp_path / "pw.db")
         assert current_version(conn) == 0
         applied = migrate(conn)
-        assert [m.version for m in applied] == [1]
-        assert current_version(conn) == 1
+        assert [m.version for m in applied] == [m.version for m in _real_migrations()]
+        assert current_version(conn) == latest_available_version()
 
     def test_migrating_twice_is_a_no_op(self, tmp_path: Path) -> None:
         conn = connect(tmp_path / "pw.db")
@@ -101,15 +102,17 @@ class TestMigrations:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         broken = Migration(
-            version=2,
+            # Far beyond any real migration, so this stays valid as more ship.
+            version=999,
             name="broken",
             sql="CREATE TABLE good_table (id INTEGER);\nTHIS IS NOT SQL;",
         )
         # Resolve the real set *before* patching, or the fake calls itself.
-        planned = [*_real_migrations(), broken]
+        real = _real_migrations()
+        planned = [*real, broken]
         monkeypatch.setattr("pricewatch.db._load_migrations", lambda: planned)
         conn = connect(tmp_path / "pw.db")
-        with pytest.raises(MigrationError, match="002_broken failed"):
+        with pytest.raises(MigrationError, match="999_broken failed"):
             migrate(conn)
 
         # The first statement of the failed migration must have been rolled back.
@@ -118,7 +121,8 @@ class TestMigrations:
             for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
         }
         assert "good_table" not in tables
-        assert current_version(conn) == 1
+        # The real migrations before it still applied and committed.
+        assert current_version(conn) == real[-1].version
 
     def test_badly_named_migration_file_is_rejected(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

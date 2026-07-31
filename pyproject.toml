@@ -4,6 +4,8 @@ version = "0.1.0"
 description = "Self-hosted price and stock monitor for saved items on UK retail accounts"
 requires-python = ">=3.12"
 dependencies = [
+    "cryptography>=49.0.0",
+    "playwright>=1.61.0",
     "pydantic>=2.7",
     "structlog>=24.1",
     "typer>=0.12",
@@ -48,6 +50,7 @@ select = [
     "ARG",  # flake8-unused-arguments
     "TRY",  # tryceratops
     "ANN",  # flake8-annotations
+    "BLE",  # flake8-blind-except
     "S",    # flake8-bandit
     "RUF",
 ]
@@ -58,6 +61,9 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = [
     "ARG001",  # pytest fixtures are declared as unused-looking arguments
+    "ARG002",  # ditto, on methods
+    "ANN401",  # test helpers take heterogeneous kwargs
+    "SIM117",  # nested `with` is clearer when the blocks mean different things
     "S101",    # assert is the point
     "S105",    # test fixtures contain credential-shaped literals by design
     "S106",

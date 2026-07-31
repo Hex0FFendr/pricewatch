@@ -64,19 +64,35 @@ _SENSITIVE_KEY_PARTS: Final = frozenset(
     }
 )
 
-#: Keys that contain a sensitive substring but are safe and useful to keep.
-#: Checked before `_SENSITIVE_KEY_PARTS`, on the same normalised form.
+#: Keys that contain a sensitive substring but name *metadata about* a
+#: credential rather than the credential: its name, count, timestamp, expiry,
+#: status or source. Checked before `_SENSITIVE_KEY_PARTS`, on the same
+#: normalised form.
+#:
+#: Allowlisting is not a blanket exemption. It only stops the key-based rule
+#: from blanking the value wholesale; the value is still walked and every string
+#: inside it still goes through `redact_text`. So a credential that turned up
+#: under an allowlisted key would still be caught by the value-based rules.
+#:
+#: Without these, `StoredSession.summary()` — which exists specifically to be
+#: logged — comes out as a row of `[REDACTED]`, and the log line that is
+#: supposed to make a broken session diagnosable says nothing at all.
 _KEY_ALLOWLIST: Final = frozenset(
     {
         "authenticated",
         "cookiecount",
+        "cookienames",
         "cookiepolicy",
         "hastoken",
+        "localstoragekeys",
+        "sessioncapturedat",
         "sessionexpiresat",
+        "sessionsource",
         "sessionstate",
         "sessionstatus",
         "tokenenv",
         "tokenexpiresat",
+        "tokennames",
     }
 )
 
