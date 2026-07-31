@@ -1,0 +1,96 @@
+# pricewatch configuration.
+#
+# Copy to ~/.config/pricewatch/config.toml and edit. Validate with:
+#     pricewatch config check
+#
+# Unknown keys are a hard error, not a warning: a typo that silently disabled a
+# trigger would look exactly like "the tool stopped finding sales".
+
+[general]
+# How often to poll. Floor is 30 minutes and is not configurable away.
+poll_interval_minutes = 180
+# Random +/- jitter so polls do not land on a predictable clock edge.
+jitter_minutes = 15
+
+# Defaults to $XDG_DATA_HOME/pricewatch (i.e. ~/.local/share/pricewatch).
+# state_dir = "~/.local/share/pricewatch"
+# Defaults to <state_dir>/pricewatch.db.
+# db_path = "~/.local/share/pricewatch/pricewatch.db"
+
+# debug | info | warning | error
+log_level = "info"
+# Consecutive failed cycles before an account is reported as degraded.
+max_consecutive_failures = 5
+# Raw (redacted) responses kept per account, for debugging a bad parse.
+raw_response_retention = 20
+
+
+# One block per retail account. `name` is used on the CLI and as the session
+# directory name, so it must be lowercase and filesystem-safe.
+[[accounts]]
+name = "asos-uk"
+site = "asos"
+
+[[accounts]]
+name = "fp-uk"
+site = "freepeople"
+# enabled = false   # keeps history, stops polling
+
+
+[triggers]
+# Any drop against the previous observation.
+any_drop = true
+
+# Drop of at least N% below the reference price. The reference is
+# max(site-reported RRP, highest price pricewatch has seen itself), because
+# retailers reset the "was" price and that would otherwise disarm this trigger.
+# Omit or set to false to disable.
+percent_off = 20
+
+# Per-item thresholds, set with: pricewatch target <item-id> 29.99
+target_price = true
+
+# At or below every price previously recorded for the item.
+lowest_ever = true
+
+# Saved size transitions out-of-stock -> in-stock.
+back_in_stock = true
+# If the saved-items response carries no per-size stock, pricewatch looks up
+# only the items whose saved size is currently out of stock, capped here.
+back_in_stock_max_lookups = 10
+
+
+# Notifiers. All are optional; configure at least one or nothing will reach you.
+# Each one fails independently: a dead webhook cannot suppress the others.
+
+[[notifiers]]
+name = "phone"
+type = "ntfy"
+topic = "your-topic-here"
+# server = "https://ntfy.sh"
+# priority = "default"       # min | low | default | high | urgent
+# Secrets take a literal string or, preferably, an environment reference:
+# token = { env = "PRICEWATCH_NTFY_TOKEN" }
+
+# [[notifiers]]
+# name = "tg"
+# type = "telegram"
+# bot_token = { env = "PRICEWATCH_TELEGRAM_TOKEN" }
+# chat_id = "123456789"
+
+# [[notifiers]]
+# name = "discord"
+# type = "discord"
+# # The webhook URL is itself the credential.
+# webhook_url = { env = "PRICEWATCH_DISCORD_WEBHOOK" }
+
+# [[notifiers]]
+# name = "mail"
+# type = "smtp"
+# host = "smtp.example.co.uk"
+# port = 587
+# starttls = true
+# username = "pricewatch@example.co.uk"
+# password = { env = "PRICEWATCH_SMTP_PASSWORD" }
+# from_address = "pricewatch@example.co.uk"
+# to_addresses = ["me@example.co.uk"]
